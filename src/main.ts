@@ -34,11 +34,10 @@ async function bootstrap() {
       '/reports',
     ];
 
-    expressApp.get('*', (req: any, res: any, next: any) => {
+    expressApp.use((req: any, res: any, next: any) => {
+      if (req.method !== 'GET') return next();
       const isApi = apiPrefixes.some((prefix) => req.url.startsWith(prefix));
-      if (isApi) {
-        return next();
-      }
+      if (isApi) return next();
       res.sendFile(join(frontendDist, 'index.html'));
     });
   }
