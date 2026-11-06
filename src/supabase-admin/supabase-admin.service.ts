@@ -7,15 +7,17 @@ import nodemailer from 'nodemailer';
 
 @Injectable()
 export class SupabaseAdminService {
-  private supabase: SupabaseClient;
+  private supabase: SupabaseClient | null = null;
 
   constructor(private config: ConfigService) {
     const url = this.config.get<string>('SUPABASE_URL');
     const key = this.config.get<string>('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!url || !key) throw new Error('Supabase environment variables are missing');
-
-    this.supabase = createClient(url, key);
+    if (url && key) {
+      this.supabase = createClient(url, key);
+    } else {
+      console.warn('⚠️ SUPABASE_SERVICE_ROLE_KEY not configured. Running in local fallback mode.');
+    }
   }
 
   private generatePassword(length = 12) {
@@ -24,6 +26,11 @@ export class SupabaseAdminService {
 
   async createUserWithPassword(email: string, role: string) {
     const tempPassword = this.generatePassword();
+
+    if (!this.supabase) {
+      // Local development fallback
+      return { id: crypto.randomUUID(), email };
+    }
 
     const { data, error } = await this.supabase.auth.admin.createUser({
       email,
@@ -36,26 +43,29 @@ export class SupabaseAdminService {
 
     const createdUser = data.user;
 
-    const transporter = nodemailer.createTransport({
-      host: this.config.get<string>('SMTP_HOST'),
-      port: Number(this.config.get<string>('SMTP_PORT')),
-      secure: Number(this.config.get<string>('SMTP_PORT')) === 465,
-      auth: {
-        user: this.config.get<string>('SMTP_USER'),
-        pass: this.config.get<string>('SMTP_PASS'),
-      },
-    });
-
-    try {
-      await transporter.sendMail({
-        from: `"HQ Admin" <${this.config.get<string>('SMTP_FROM')}>`,
-        to: email,
-        subject: 'Your Account Credentials',
-        text: `Your account has been created.\n\nEmail: ${email}\nPassword: ${tempPassword}\n\nUse this password to log in directly.`,
+    const smtpHost = this.config.get<string>('SMTP_HOST');
+    if (smtpHost) {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: Number(this.config.get<string>('SMTP_PORT')),
+        secure: Number(this.config.get<string>('SMTP_PORT')) === 465,
+        auth: {
+          user: this.config.get<string>('SMTP_USER'),
+          pass: this.config.get<string>('SMTP_PASS'),
+        },
       });
-    } catch (err: any) {
-      if (createdUser?.id) await this.supabase.auth.admin.deleteUser(createdUser.id);
-      throw new BadRequestException(`Failed to send email: ${err.message}`);
+
+      try {
+        await transporter.sendMail({
+          from: `"HQ Admin" <${this.config.get<string>('SMTP_FROM')}>`,
+          to: email,
+          subject: 'Your Account Credentials',
+          text: `Your account has been created.\n\nEmail: ${email}\nPassword: ${tempPassword}\n\nUse this password to log in directly.`,
+        });
+      } catch (err: any) {
+        if (createdUser?.id) await this.supabase.auth.admin.deleteUser(createdUser.id);
+        throw new BadRequestException(`Failed to send email: ${err.message}`);
+      }
     }
 
     return createdUser;

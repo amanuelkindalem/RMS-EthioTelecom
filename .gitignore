@@ -1,7 +1,11 @@
 # compiled output
-/dist
-/node_modules
+dist
 /build
+frontend/dist
+
+# dependencies
+node_modules
+frontend/node_modules
 
 # Generated files
 get-hqadmin-jwt.ts
