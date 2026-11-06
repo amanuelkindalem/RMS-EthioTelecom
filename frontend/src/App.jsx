@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { OfflineProvider, useOffline } from './context/OfflineContext';
-import { MobileHeader } from './components/MobileHeader';
-import { MobileTabBar } from './components/MobileTabBar';
+import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 
-// Views
+// Dedicated Driver Mobile App
+import { DriverMobileApp } from './views/DriverMobileApp';
+
+// Operations Web Dashboard Views
 import { DashboardView } from './views/DashboardView';
 import { FuelSessionsView } from './views/FuelSessionsView';
-import { DriverMobileView } from './views/DriverMobileView';
 import { ManagerApprovalView } from './views/ManagerApprovalView';
 import { FinanceView } from './views/FinanceView';
 import { FraudAlertsView } from './views/FraudAlertsView';
@@ -33,10 +35,10 @@ import {
 } from './api/client';
 
 const MainLayout = () => {
-  const { role, user } = useAuth();
+  const { role, user, switchRole } = useAuth();
   const { syncQueue } = useOffline();
 
-  const [activeTab, setActiveTab] = useState(role === 'DRIVER' ? 'driver-app' : 'dashboard');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [toast, setToast] = useState(null);
 
   // Core Data Collections
@@ -95,13 +97,6 @@ const MainLayout = () => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
-
-  // Sync role changes to default views
-  useEffect(() => {
-    if (role === 'DRIVER') {
-      setActiveTab('driver-app');
-    }
-  }, [role]);
 
   // Try fetching live backend data if available
   useEffect(() => {
@@ -389,120 +384,166 @@ const MainLayout = () => {
     showToast('Investigation concluded and resolution notes logged.');
   };
 
-  const pendingCount = requests.filter((r) => r.status === 'PENDING').length;
-  const fraudCount = fraudCases.filter((f) => !f.resolved).length;
   const driversList = users.filter((u) => u.role === 'DRIVER');
 
-  return (
-    <div className="mobile-app-viewport">
-      <MobileHeader />
-
-      <main className="mobile-scroll-body">
-        {activeTab === 'dashboard' && (
-          <DashboardView
-            sessions={sessions}
-            requests={requests}
-            fraudCases={fraudCases}
-            vehicles={vehicles}
-            onNavigate={setActiveTab}
-          />
-        )}
-
-        {activeTab === 'driver-app' && (
-          <DriverMobileView
-            sessions={sessions}
-            requests={requests}
-            onSubmitRequest={handleSubmitFuelRequest}
-          />
-        )}
-
-        {activeTab === 'fuel-sessions' && (
-          <FuelSessionsView
-            sessions={sessions}
-            branches={branches}
-            vehicles={vehicles}
-            drivers={driversList.length > 0 ? driversList : users}
-            onCreateSession={handleCreateSession}
-            onRecordInitial={handleRecordInitial}
-            onRecordMetadata={handleRecordMetadata}
-            onCloseSession={handleCloseSession}
-          />
-        )}
-
-        {activeTab === 'approvals' && (
-          <ManagerApprovalView
-            requests={requests}
-            sessions={sessions}
-            onApprove={handleApproveRequest}
-            onReject={handleRejectRequest}
-          />
-        )}
-
-        {activeTab === 'finance' && (
-          <FinanceView
-            approvedRequests={requests}
-            transactions={transactions}
-            onProcessDisbursement={handleProcessDisbursement}
-          />
-        )}
-
-        {activeTab === 'fraud' && (
-          <FraudAlertsView
-            fraudCases={fraudCases}
-            sessions={sessions}
-            onResolveCase={handleResolveCase}
-          />
-        )}
-
-        {activeTab === 'users' && (
-          <UsersView
-            users={users}
-            branches={branches}
-            onCreateUser={handleCreateUser}
-            onDeactivateUser={handleDeactivateUser}
-          />
-        )}
-
-        {activeTab === 'branches' && (
-          <BranchesView
-            branches={branches}
-            onCreateBranch={handleCreateBranch}
-          />
-        )}
-
-        {activeTab === 'vehicles' && (
-          <VehiclesView
-            vehicles={vehicles}
-            branches={branches}
-            onCreateVehicle={handleCreateVehicle}
-          />
-        )}
-
-        {activeTab === 'reports' && (
-          <ReportsView
-            sessions={sessions}
-            transactions={transactions}
-            fraudCases={fraudCases}
-            branches={branches}
-            vehicles={vehicles}
-            users={users}
-            onNavigate={setActiveTab}
-          />
-        )}
-      </main>
-
-      {/* Mobile Tab Bar */}
-      <MobileTabBar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        pendingCount={pendingCount}
-        fraudCount={fraudCount}
+  // =========================================================
+  // 1. DRIVER-ONLY MOBILE APP EXPERIENCE
+  // If user role is DRIVER: Render ONLY the dedicated Driver Mobile App!
+  // =========================================================
+  if (role === 'DRIVER') {
+    return (
+      <DriverMobileApp
+        sessions={sessions}
+        requests={requests}
+        onSubmitRequest={handleSubmitFuelRequest}
       />
+    );
+  }
 
-      {/* Floating Mobile Toast */}
+  // =========================================================
+  // 2. OPERATIONS & MANAGEMENT WEB DASHBOARD
+  // For Refuel Team, Refuel Manager, Finance, Branch Admin, HQ Admin, Fuel Admin
+  // =========================================================
+  return (
+    <div className="dashboard-layout">
+      <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
+
+      <div className="dashboard-main">
+        {/* Top Navbar */}
+        <header className="dashboard-topbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
+              EthioTelecom RMS
+            </div>
+            <span className="badge badge-primary">Operations Desk</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Quick jump to Driver Mobile Experience button */}
+            <button
+              onClick={() => switchRole('DRIVER')}
+              className="mode-switch-pill"
+              title="Test the Driver Mobile Application"
+            >
+              <span>📱 Open Driver Mobile App</span>
+            </button>
+
+            {/* Active User Info & Role Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <select
+                value={role}
+                onChange={(e) => switchRole(e.target.value)}
+                className="form-select"
+                style={{ width: 'auto', padding: '6px 12px', fontSize: '0.82rem', fontWeight: 700 }}
+              >
+                <option value="REFUELING_MANAGER">Refuel Manager</option>
+                <option value="REFUELING_TEAM">Refueling Team</option>
+                <option value="FINANCE">Finance Team</option>
+                <option value="FUEL_ADMIN">Fuel Fleet Admin</option>
+                <option value="BRANCH_ADMIN">Branch Admin</option>
+                <option value="HQ_ADMIN">HQ Admin</option>
+              </select>
+
+              <div style={{ textAlign: 'right', marginLeft: '6px' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>{user?.fullName}</div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{user?.email}</div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Dashboard Main Content Body */}
+        <main className="dashboard-content">
+          {activeTab === 'dashboard' && (
+            <DashboardView
+              sessions={sessions}
+              requests={requests}
+              fraudCases={fraudCases}
+              vehicles={vehicles}
+              onNavigate={setActiveTab}
+            />
+          )}
+
+          {activeTab === 'fuel-sessions' && (
+            <FuelSessionsView
+              sessions={sessions}
+              branches={branches}
+              vehicles={vehicles}
+              drivers={driversList.length > 0 ? driversList : users}
+              onCreateSession={handleCreateSession}
+              onRecordInitial={handleRecordInitial}
+              onRecordMetadata={handleRecordMetadata}
+              onCloseSession={handleCloseSession}
+            />
+          )}
+
+          {activeTab === 'approvals' && (
+            <ManagerApprovalView
+              requests={requests}
+              sessions={sessions}
+              onApprove={handleApproveRequest}
+              onReject={handleRejectRequest}
+            />
+          )}
+
+          {activeTab === 'finance' && (
+            <FinanceView
+              approvedRequests={requests}
+              transactions={transactions}
+              onProcessDisbursement={handleProcessDisbursement}
+            />
+          )}
+
+          {activeTab === 'fraud' && (
+            <FraudAlertsView
+              fraudCases={fraudCases}
+              sessions={sessions}
+              onResolveCase={handleResolveCase}
+            />
+          )}
+
+          {activeTab === 'users' && (
+            <UsersView
+              users={users}
+              branches={branches}
+              onCreateUser={handleCreateUser}
+              onDeactivateUser={handleDeactivateUser}
+            />
+          )}
+
+          {activeTab === 'branches' && (
+            <BranchesView
+              branches={branches}
+              onCreateBranch={handleCreateBranch}
+            />
+          )}
+
+          {activeTab === 'vehicles' && (
+            <VehiclesView
+              vehicles={vehicles}
+              branches={branches}
+              onCreateVehicle={handleCreateVehicle}
+            />
+          )}
+
+          {activeTab === 'reports' && (
+            <ReportsView
+              sessions={sessions}
+              transactions={transactions}
+              fraudCases={fraudCases}
+              branches={branches}
+              vehicles={vehicles}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Floating Toast Notification */}
       {toast && (
-        <div className={`mobile-toast toast-${toast.type}`}>
-          <span>{toast.message}</span>
+        <div className="toast-container">
+          <div className={`toast toast-${toast.type}`}>
+            <span>{toast.message}</span>
+          </div>
         </div>
       )}
     </div>
